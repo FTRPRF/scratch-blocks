@@ -76,7 +76,10 @@ jobs:
         run: |
           npm pack --dry-run --json --ignore-scripts > pack.json
           node -e '
-            const listed = new Set(require("./pack.json")[0].files.map(f => f.path));
+            // Lifecycle noise (husky) can precede the JSON; parse from the array.
+            const raw = require("fs").readFileSync("pack.json", "utf8");
+            const json = raw.slice(raw.search(/^\[$/m));
+            const listed = new Set(JSON.parse(json)[0].files.map(f => f.path));
             const asserted = require("./asserted-files.json");
             const missing = asserted.filter(f => !listed.has(f));
             if (missing.length) {
