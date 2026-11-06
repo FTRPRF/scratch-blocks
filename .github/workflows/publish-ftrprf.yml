@@ -1,0 +1,95 @@
+name: Publish @ftrprf/scratch-blocks
+
+# Manual only. Publishes the version in package.json from the ref you run it on
+# to GitHub Packages. Nothing is published from a laptop.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-ftrprf
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4
+        with:
+          node-version: 18
+          registry-url: https://npm.pkg.github.com
+          scope: '@ftrprf'
+
+      # build.py is a python2-era script that shells out to a bare `python`;
+      # it runs fine on python3 (SyntaxWarning noise only).
+      - name: Provide `python` (python3 shim)
+        run: |
+          mkdir -p "$HOME/pyshim"
+          ln -s "$(command -v python3)" "$HOME/pyshim/python"
+          echo "$HOME/pyshim" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test
+        run: npm test
+        env:
+          CI: 'true'
+
+      - name: Build
+        run: npm run prepublish
+
+      - name: Assert the built files exist
+        run: |
+          node -e '
+            const fs = require("fs");
+            const pkg = require("./package.json");
+            const files = new Set([
+              "blocks_compressed.js",
+              "blocks_compressed_vertical.js",
+              "dist/vertical.js"
+            ]);
+            for (const key of ["main", "browser"]) {
+              if (typeof pkg[key] === "string") files.add(pkg[key].replace(/^\.\//, ""));
+            }
+            for (const f of pkg.files || []) files.add(f.replace(/^\.\//, ""));
+            let missing = 0;
+            for (const f of files) {
+              if (!fs.existsSync(f)) { console.error("MISSING after build: " + f); missing++; }
+            }
+            if (missing) process.exit(1);
+            fs.writeFileSync("asserted-files.json", JSON.stringify([...files]));
+            console.log("asserted:", [...files].join(", "));
+          '
+
+      - name: Record the source commit in package.json
+        run: npm pkg set ftrprf.sourceCommit="${{ github.sha }}"
+
+      - name: Check the tarball contents
+        run: |
+          npm pack --dry-run --json --ignore-scripts > pack.json
+          node -e '
+            const listed = new Set(require("./pack.json")[0].files.map(f => f.path));
+            const asserted = require("./asserted-files.json");
+            const missing = asserted.filter(f => !listed.has(f));
+            if (missing.length) {
+              console.error("Not in the tarball: " + missing.join(", "));
+              process.exit(1);
+            }
+            console.log("tarball has all", asserted.length, "asserted files");
+          '
+          rm pack.json asserted-files.json
+
+      # Scripts are skipped: the build already ran above, and `prepublish`
+      # would run it a second time.
+      - name: Publish
+        run: npm publish --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
