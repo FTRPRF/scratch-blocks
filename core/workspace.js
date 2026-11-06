@@ -129,6 +129,15 @@ Blockly.Workspace = function(opt_options) {
    * @private
    */
   this.usefulBlocks_ = [];
+
+  /**
+   * FTRPRF: the texts of the developer-mode "hide" and "display" blocks
+   * context-menu options. Unset means the English defaults.
+   * @type {string|undefined}
+   * @private
+   */
+  this.hideBlocksString_ = undefined;
+  this.displayBlocksString_ = undefined;
 };
 
 /**
@@ -678,6 +687,34 @@ Blockly.Workspace.prototype.isInDeveloperMode = function() {
  */
 Blockly.Workspace.prototype.setDeveloperMode = function(developerMode) {
   this.developerMode_ = developerMode;
+};
+
+/**
+ * FTRPRF: get the text of the context-menu option that hides blocks.
+ * @return {string|undefined} The text, or undefined when none was set.
+ */
+Blockly.Workspace.prototype.getHideBlocksString = function() {
+  return this.hideBlocksString_;
+};
+
+/**
+ * FTRPRF: get the text of the context-menu option that displays hidden blocks.
+ * @return {string|undefined} The text, or undefined when none was set.
+ */
+Blockly.Workspace.prototype.getDisplayBlocksString = function() {
+  return this.displayBlocksString_;
+};
+
+/**
+ * FTRPRF: set the (localised) texts of the developer-mode context-menu
+ * options. May be called at any time; the next menu uses the new texts.
+ * @param {string} hideBlocksString Text of the option that hides blocks.
+ * @param {string} displayBlocksString Text of the option that displays them.
+ */
+Blockly.Workspace.prototype.setHideAndDisplayStrings = function(
+    hideBlocksString, displayBlocksString) {
+  this.hideBlocksString_ = hideBlocksString;
+  this.displayBlocksString_ = displayBlocksString;
 };
 
 /**

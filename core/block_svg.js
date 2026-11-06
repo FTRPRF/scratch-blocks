@@ -922,6 +922,13 @@ Blockly.BlockSvg.prototype.showContextMenu_ = function(e) {
     return;
   }
 
+  // FTRPRF: exercise developers can hide or show a group of blocks.
+  if (this.workspace.isInDeveloperMode()) {
+    menuOptions.push(this.isInvisible() ?
+        Blockly.ContextMenu.unhideBlockOption(this) :
+        Blockly.ContextMenu.hideBlockOption(this));
+  }
+
   // Allow the block to add or modify menuOptions.
   if (this.customContextMenu) {
     this.customContextMenu(menuOptions);

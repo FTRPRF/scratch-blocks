@@ -12,6 +12,7 @@
 'use strict';
 
 goog.require('goog.testing');
+goog.require('goog.testing.events');
 
 var ftrprfTest_workspaces = [];
 var ftrprfTest_divs = [];
@@ -658,4 +659,149 @@ function test_historicalShapes_coverEverySHAPESEntry() {
   shapes.forEach(function(shape, i) {
     assertEquals('duplicate shape ' + shape, i, shapes.indexOf(shape));
   });
+}
+
+// ---------------------------------------------------------------------------
+// Developer-mode hide / show context-menu items (TR-4805 Task 2).
+// ---------------------------------------------------------------------------
+
+/**
+ * Open the real context menu of a block on a rendered workspace.
+ * @param {!Blockly.BlockSvg} block The block to right-click.
+ * @return {!Array.<!Element>} The rendered menu item elements.
+ */
+function ftrprfTest_openMenu(block) {
+  block.showContextMenu_({clientX: 10, clientY: 10,
+    preventDefault: function() {}});
+  return Array.prototype.slice.call(
+      document.querySelectorAll('.goog-menuitem'));
+}
+
+function ftrprfTest_menuItem(items, dataTest) {
+  return items.filter(function(item) {
+    return item.getAttribute('data-test') === dataTest;
+  })[0];
+}
+
+function ftrprfTest_menuTexts(items) {
+  return items.map(function(item) {
+    return item.textContent;
+  });
+}
+
+function test_developerMode_addsHideAndShowItems_withGivenTexts() {
+  var ws = ftrprfTest_newWorkspace(true, true);
+  ws.setHideAndDisplayStrings('Verberg blokken', 'Toon blokken');
+  var flag = ftrprfTest_block(FTRPRF_FLAG_SCRIPT, ws);
+
+  var items = ftrprfTest_openMenu(flag);
+  var hide = ftrprfTest_menuItem(items, 'ftrprf-hide-blocks');
+  assertNotUndefined('hide item present', hide);
+  assertEquals('Verberg blokken', hide.textContent);
+  assertUndefined('no show item while visible',
+      ftrprfTest_menuItem(items, 'ftrprf-display-blocks'));
+  Blockly.ContextMenu.hide();
+
+  flag.setInvisible(true);
+  items = ftrprfTest_openMenu(flag);
+  var show = ftrprfTest_menuItem(items, 'ftrprf-display-blocks');
+  assertNotUndefined('show item present', show);
+  assertEquals('Toon blokken', show.textContent);
+  assertUndefined('no hide item while hidden',
+      ftrprfTest_menuItem(items, 'ftrprf-hide-blocks'));
+  Blockly.ContextMenu.hide();
+}
+
+function test_developerMode_defaultTexts_whenNoneGiven() {
+  var ws = ftrprfTest_newWorkspace(true, true);
+  var flag = ftrprfTest_block(FTRPRF_FLAG_SCRIPT, ws);
+  var items = ftrprfTest_openMenu(flag);
+  assertEquals('Hide blocks',
+      ftrprfTest_menuItem(items, 'ftrprf-hide-blocks').textContent);
+  Blockly.ContextMenu.hide();
+}
+
+function test_nonDeveloperMode_hasNoHideItems() {
+  var ws = ftrprfTest_newWorkspace(false, true);
+  var flag = ftrprfTest_block(FTRPRF_FLAG_SCRIPT, ws);
+  var items = ftrprfTest_openMenu(flag);
+  assertTrue('the menu itself is shown', items.length > 0);
+  assertUndefined(ftrprfTest_menuItem(items, 'ftrprf-hide-blocks'));
+  assertUndefined(ftrprfTest_menuItem(items, 'ftrprf-display-blocks'));
+  Blockly.ContextMenu.hide();
+}
+
+function test_hideItem_setsInvisible() {
+  var ws = ftrprfTest_newWorkspace(true, true);
+  var flag = ftrprfTest_block(FTRPRF_FLAG_SCRIPT, ws);
+  var inner = ws.getBlockById('inner');
+
+  // Right-clicking a child hides the whole group (the root is the hat).
+  var items = ftrprfTest_openMenu(inner);
+  var hide = ftrprfTest_menuItem(items, 'ftrprf-hide-blocks');
+  goog.testing.events.fireClickSequence(hide);
+  assertTrue('group is hidden', flag.isInvisible());
+  assertEquals('hidden marker comment', '%hidden%', flag.getCommentText());
+
+  items = ftrprfTest_openMenu(flag);
+  goog.testing.events.fireClickSequence(
+      ftrprfTest_menuItem(items, 'ftrprf-display-blocks'));
+  assertFalse('group is visible again', flag.isInvisible());
+  assertFalse('marker is gone', /%hidden%/.test(flag.getCommentText()));
+}
+
+function test_hideItem_disabledForNonHatRoot() {
+  var ws = ftrprfTest_newWorkspace(true, true);
+  var block = ftrprfTest_block(ftrprfFixture_moveSteps('solo'), ws);
+  var items = ftrprfTest_openMenu(block);
+  var hide = ftrprfTest_menuItem(items, 'ftrprf-hide-blocks');
+  assertNotUndefined(hide);
+  assertTrue('disabled', /disabled/.test(hide.className));
+  Blockly.ContextMenu.hide();
+}
+
+function test_setHideAndDisplayStrings_changesMenuTexts_afterInit() {
+  var ws = ftrprfTest_newWorkspace(true, true);
+  var flag = ftrprfTest_block(FTRPRF_FLAG_SCRIPT, ws);
+
+  ws.setHideAndDisplayStrings('Hide (en)', 'Show (en)');
+  assertEquals('Hide (en)', ws.getHideBlocksString());
+  assertEquals('Show (en)', ws.getDisplayBlocksString());
+  var items = ftrprfTest_openMenu(flag);
+  assertEquals('Hide (en)',
+      ftrprfTest_menuItem(items, 'ftrprf-hide-blocks').textContent);
+  Blockly.ContextMenu.hide();
+
+  // A locale switch after the menu was already shown once.
+  ws.setHideAndDisplayStrings('Verberg (nl)', 'Toon (nl)');
+  assertEquals('Verberg (nl)', ws.getHideBlocksString());
+  assertEquals('Toon (nl)', ws.getDisplayBlocksString());
+  items = ftrprfTest_openMenu(flag);
+  assertEquals('Verberg (nl)',
+      ftrprfTest_menuItem(items, 'ftrprf-hide-blocks').textContent);
+  Blockly.ContextMenu.hide();
+  flag.setInvisible(true);
+  items = ftrprfTest_openMenu(flag);
+  assertEquals('Toon (nl)',
+      ftrprfTest_menuItem(items, 'ftrprf-display-blocks').textContent);
+  Blockly.ContextMenu.hide();
+}
+
+function test_menuItems_carryDataTestAttributes() {
+  var ws = ftrprfTest_newWorkspace(true, true);
+  var flag = ftrprfTest_block(FTRPRF_FLAG_SCRIPT, ws);
+  var items = ftrprfTest_openMenu(flag);
+  var hide = ftrprfTest_menuItem(items, 'ftrprf-hide-blocks');
+  assertNotUndefined(hide);
+  assertEquals('menu item element', 'goog-menuitem',
+      hide.className.split(' ')[0]);
+  // Upstream items stay free of the attribute.
+  assertEquals('only one tagged item', 1, items.filter(function(item) {
+    return item.hasAttribute('data-test');
+  }).length);
+  Blockly.ContextMenu.hide();
+  flag.setInvisible(true);
+  items = ftrprfTest_openMenu(flag);
+  assertNotUndefined(ftrprfTest_menuItem(items, 'ftrprf-display-blocks'));
+  Blockly.ContextMenu.hide();
 }

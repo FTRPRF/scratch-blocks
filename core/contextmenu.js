@@ -99,6 +99,10 @@ Blockly.ContextMenu.populate_ = function(options, rtl) {
     var menuItem = new goog.ui.MenuItem(option.text);
     menuItem.setRightToLeft(rtl);
     menu.addChild(menuItem, true);
+    // FTRPRF: let an option tag its rendered element, e.g. for e2e selectors.
+    if (option.dataTest) {
+      menuItem.getElement().setAttribute('data-test', option.dataTest);
+    }
     menuItem.setEnabled(option.enabled);
     if (option.enabled) {
       goog.events.listen(
@@ -297,6 +301,40 @@ Blockly.ContextMenu.blockCommentOption = function(block) {
     };
   }
   return commentOption;
+};
+
+/**
+ * FTRPRF: make a context menu option for hiding the group of blocks that the
+ * given block belongs to. Only offered to exercise developers; only possible
+ * for a group that starts with a hat block.
+ * @param {!Blockly.BlockSvg} block The block where the right-click originated.
+ * @return {!Object} A menu option, containing text, enabled and a callback.
+ */
+Blockly.ContextMenu.hideBlockOption = function(block) {
+  return {
+    text: Blockly.ContextMenu.getHideBlocksString(block),
+    enabled: block.getRootBlock().isHatBlock(),
+    dataTest: 'ftrprf-hide-blocks',
+    callback: function() {
+      block.getRootBlock().setHiddenComment(true);
+    }
+  };
+};
+
+/**
+ * FTRPRF: make a context menu option for making a hidden group visible again.
+ * @param {!Blockly.BlockSvg} block The block where the right-click originated.
+ * @return {!Object} A menu option, containing text, enabled and a callback.
+ */
+Blockly.ContextMenu.unhideBlockOption = function(block) {
+  return {
+    text: Blockly.ContextMenu.getDisplayBlocksString(block),
+    enabled: true,
+    dataTest: 'ftrprf-display-blocks',
+    callback: function() {
+      block.getRootBlock().setHiddenComment(false);
+    }
+  };
 };
 
 /**
@@ -517,3 +555,22 @@ Blockly.ContextMenu.workspaceCommentOption = function(ws, e) {
 };
 
 // End helper functions for creating context menu options.
+
+/**
+ * FTRPRF: the text of the "hide blocks" option. Read from the workspace on
+ * every call (not cached), so a locale switch after init takes effect.
+ * @param {!Blockly.BlockSvg} block A block, to reach its workspace.
+ * @return {string} The text of the hide option.
+ */
+Blockly.ContextMenu.getHideBlocksString = function(block) {
+  return block.workspace.getHideBlocksString() || 'Hide blocks';
+};
+
+/**
+ * FTRPRF: the text of the "display blocks" option. Not cached, see above.
+ * @param {!Blockly.BlockSvg} block A block, to reach its workspace.
+ * @return {string} The text of the display option.
+ */
+Blockly.ContextMenu.getDisplayBlocksString = function(block) {
+  return block.workspace.getDisplayBlocksString() || 'Display blocks';
+};
