@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Unit Tests for FTRPRF Scratch-Blockly</title>
+    <!--
+      FTRPRF hidden-blocks / useful-blocks tests. These need the real vertical
+      block definitions (procedures_*, event_*, ...), which vertical_tests.html
+      does not load; loading them there would change the upstream suites (e.g.
+      procedure_test.js swaps procedures_call in and out of Blockly.Blocks).
+    -->
+    <script src="../../blockly_uncompressed_vertical.js"></script>
+    <script src="../../msg/messages.js"></script>
+    <script src="../../msg/scratch_msgs.js"></script>
+    <script src="../../blocks_vertical/vertical_extensions.js"></script>
+    <script src="../../blocks_common/math.js"></script>
+    <script src="../../blocks_common/text.js"></script>
+    <script src="../../blocks_vertical/control.js"></script>
+    <script src="../../blocks_vertical/event.js"></script>
+    <script src="../../blocks_vertical/motion.js"></script>
+    <script src="../../blocks_vertical/looks.js"></script>
+    <script src="../../blocks_vertical/procedures.js"></script>
+    <script src="../../blocks_vertical/operators.js"></script>
+    <script src="../../blocks_vertical/data.js"></script>
+    <script>goog.require('goog.testing.jsunit');</script>
+  </head>
+  <body>
+    <script src="ftrprf_fixtures.js"></script>
+    <script src="ftrprf_useful_blocks_test.js"></script>
+    <div id="blocklyDiv" style="display: none; height: 480px; width: 600px;"></div>
+    <xml id="toolbox" style="display: none"></xml>
+  </body>
+</html>

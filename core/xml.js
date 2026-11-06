@@ -422,6 +422,8 @@ Blockly.Xml.clearWorkspaceAndLoadFromXml = function(xml, workspace) {
  * @return {Array.<string>} An array containing new block IDs.
  */
 Blockly.Xml.domToWorkspace = function(xml, workspace) {
+  // FTRPRF: set by domToBlock when an 'Exercise blocks' definition loads.
+  Blockly.Xml.isExerciseBlocksProcedurePresent = false;
   if (xml instanceof Blockly.Workspace) {
     var swap = xml;
     xml = workspace;
@@ -492,6 +494,14 @@ Blockly.Xml.domToWorkspace = function(xml, workspace) {
         }
         variablesFirst = false;
       }
+    }
+    // FTRPRF: every exercise gets an 'Exercise blocks' definition. Skipped
+    // when the procedure blocks are not registered (bare Blockly without the
+    // Scratch block set), where creating it would throw.
+    if (!Blockly.Xml.isExerciseBlocksProcedurePresent &&
+        Blockly.Blocks[Blockly.PROCEDURES_DEFINITION_BLOCK_TYPE] &&
+        Blockly.Blocks[Blockly.PROCEDURES_PROTOTYPE_BLOCK_TYPE]) {
+      workspace.createExerciseBlocksCallback();
     }
   } finally {
     if (!existingGroup) {
@@ -582,6 +592,17 @@ Blockly.Xml.domToBlock = function(xmlBlock, workspace) {
     var topBlock = Blockly.Xml.domToBlockHeadless_(xmlBlock, workspace);
     // Generate list of all blocks.
     var blocks = topBlock.getDescendants(false);
+
+    // FTRPRF: the blocks under 'define Exercise blocks' are the ones the
+    // flyout keeps for this exercise.
+    if (topBlock.isDefineExerciseBlocksBlock()) {
+      Blockly.Xml.isExerciseBlocksProcedurePresent = true;
+      // Skip the definition and its 'Exercise blocks' prototype.
+      var usefulBlocks = blocks.slice(2);
+      var usefulBlockTypes = workspace.mapBlocksToType(usefulBlocks);
+      workspace.setUsefulBlocks(usefulBlockTypes);
+    }
+
     if (workspace.rendered) {
       // Hide connections to speed up assembly.
       topBlock.setConnectionsHidden(true);
@@ -713,8 +734,16 @@ Blockly.Xml.domToBlockHeadless_ = function(xmlBlock, workspace) {
         block.setCommentText(xmlChild.textContent, commentId, bubbleX, bubbleY,
             minimized == 'true');
 
+        // FTRPRF: a "%hidden%" comment hides the group, and for
+        // non-developers its bubble is not opened.
+        var hiddenTag = '%hidden%';
+        var isHiddenComment = xmlChild.textContent.indexOf(hiddenTag) === 0;
+        if (isHiddenComment) {
+          block.setInvisible(true);
+        }
+        var isNotHidden = block.workspace.isInDeveloperMode() || !isHiddenComment;
         var visible = xmlChild.getAttribute('pinned');
-        if (visible && !block.isInFlyout) {
+        if (visible && isNotHidden && !block.isInFlyout) {
           // Give the renderer a millisecond to render and position the block
           // before positioning the comment bubble.
           setTimeout(function() {
@@ -761,6 +790,11 @@ Blockly.Xml.domToBlockHeadless_ = function(xmlBlock, workspace) {
             input.connection.connect(blockChild.outputConnection);
           } else if (blockChild.previousConnection) {
             input.connection.connect(blockChild.previousConnection);
+            // FTRPRF: 'define Exercise blocks' is hidden for non-developers.
+            if (blockChild.toString() === 'Exercise blocks' &&
+                !workspace.isInDeveloperMode()) {
+              blockChild.getParent().setInvisible(true);
+            }
           } else {
             goog.asserts.fail(
                 'Child block does not have output or previous statement.');
@@ -782,6 +816,12 @@ Blockly.Xml.domToBlockHeadless_ = function(xmlBlock, workspace) {
           goog.asserts.assert(blockChild.previousConnection,
               'Next block does not have previous statement.');
           block.nextConnection.connect(blockChild.previousConnection);
+          // FTRPRF: blocks stacked under a hidden block are hidden too. This
+          // relies on the comment being read before the next block, which is
+          // the order scratch-vm writes.
+          if (block.isInvisible()) {
+            blockChild.setInvisible(true);
+          }
         }
         break;
       default:

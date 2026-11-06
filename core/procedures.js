@@ -228,14 +228,19 @@ Blockly.Procedures.flyoutCategory = function(workspace) {
   mutations = Blockly.Procedures.sortProcedureMutations_(mutations);
   for (var i = 0; i < mutations.length; i++) {
     var mutation = mutations[i];
-    // <block type="procedures_call">
-    //   <mutation ...></mutation>
-    // </block>
-    var block = goog.dom.createDom('block');
-    block.setAttribute('type', 'procedures_call');
-    block.setAttribute('gap', 16);
-    block.appendChild(mutation);
-    xmlList.push(block);
+    // FTRPRF: only offer useful custom blocks, never 'Exercise blocks' (its
+    // definition only lists which blocks are exercise blocks).
+    var procCode = mutation.getAttribute('proccode');
+    if (workspace.isProcCodeUseful(procCode)) {
+      // <block type="procedures_call">
+      //   <mutation ...></mutation>
+      // </block>
+      var block = goog.dom.createDom('block');
+      block.setAttribute('type', 'procedures_call');
+      block.setAttribute('gap', 16);
+      block.appendChild(mutation);
+      xmlList.push(block);
+    }
   }
   return xmlList;
 };
@@ -385,6 +390,36 @@ Blockly.Procedures.newProcedureMutation = function() {
 };
 
 /**
+ * FTRPRF: return a function that creates the 'Exercise blocks' procedure.
+ * @param {!Blockly.Workspace} workspace The workspace to create it on.
+ * @return {function()} The callback.
+ */
+Blockly.Procedures.setCreateExerciseBlocksCallback = function(workspace) {
+  return function() {
+    Blockly.Procedures.newExerciseBlocksProcedure(workspace);
+  };
+};
+
+/**
+ * FTRPRF: create the 'Exercise blocks' procedure definition, whose stacked
+ * blocks list the blocks that are useful for the exercise.
+ * @param {!Blockly.Workspace} workspace The workspace to create it on.
+ */
+Blockly.Procedures.newExerciseBlocksProcedure = function(workspace) {
+  var exerciseBlocksMutationText = '<xml>' +
+      '<mutation' +
+      ' proccode="Exercise blocks"' +
+      ' argumentids="[]"' +
+      ' argumentnames="[]"' +
+      ' argumentdefaults="[]"' +
+      ' warp="false">' +
+      '</mutation>' +
+      '</xml>';
+  var mutation = Blockly.Xml.textToDom(exerciseBlocksMutationText).firstChild;
+  Blockly.Procedures.createProcedureCallbackFactory_(workspace)(mutation);
+};
+
+/**
  * Callback to create a new procedure custom command block.
  * @param {!Blockly.Workspace} workspace The workspace to create the new procedure on.
  * @private
@@ -405,6 +440,14 @@ Blockly.Procedures.createProcedureDefCallback_ = function(workspace) {
 Blockly.Procedures.createProcedureCallbackFactory_ = function(workspace) {
   return function(mutation) {
     if (mutation) {
+      // FTRPRF: custom blocks made by non-developers must stay in the
+      // (filtered) toolbox, so they become useful blocks.
+      var proccode = mutation.getAttribute('proccode');
+      var needsToAddNewMutationToExerciseBlocks =
+          !workspace.isInDeveloperMode() && proccode !== 'Exercise blocks';
+      if (needsToAddNewMutationToExerciseBlocks) {
+        workspace.addNewMutationToUsefulBlocks(mutation, true);
+      }
       var blockText = '<xml>' +
           '<block type="procedures_definition">' +
           '<statement name="custom_block">' +
@@ -417,17 +460,31 @@ Blockly.Procedures.createProcedureCallbackFactory_ = function(workspace) {
       var blockDom = Blockly.Xml.textToDom(blockText).firstChild;
       Blockly.Events.setGroup(true);
       var block = Blockly.Xml.domToBlock(blockDom, workspace);
-      var scale = workspace.scale; // To convert from pixel units to workspace units
-      // Position the block so that it is at the top left of the visible workspace,
-      // padded from the edge by 30 units. Position in the top right if RTL.
-      var posX = -workspace.scrollX;
-      if (workspace.RTL) {
-        posX += workspace.getMetrics().contentWidth - 30;
-      } else {
-        posX += 30;
+      // FTRPRF: developers get an explanation on the 'Exercise blocks'
+      // definition (for everyone else it is hidden on creation).
+      var shouldAddCommentToExerciseBlock =
+          proccode === 'Exercise blocks' && !block.isInvisible();
+      if (shouldAddCommentToExerciseBlock) {
+        block.setCommentText(
+            'Drag here all the blocks that are useful for this exercise and ' +
+            'those will only show these blocks to whoever is making the exercise. ' +
+            'This block is automatically hidden.');
       }
-      block.moveBy(posX / scale, (-workspace.scrollY + 30) / scale);
-      block.scheduleSnapAndBump();
+      // FTRPRF: a headless workspace (no scroll, scale or bumping) also
+      // reaches this through domToWorkspace's 'Exercise blocks' creation.
+      if (workspace.rendered) {
+        var scale = workspace.scale; // To convert from pixel units to workspace units
+        // Position the block so that it is at the top left of the visible workspace,
+        // padded from the edge by 30 units. Position in the top right if RTL.
+        var posX = -workspace.scrollX;
+        if (workspace.RTL) {
+          posX += workspace.getMetrics().contentWidth - 30;
+        } else {
+          posX += 30;
+        }
+        block.moveBy(posX / scale, (-workspace.scrollY + 30) / scale);
+        block.scheduleSnapAndBump();
+      }
       Blockly.Events.setGroup(false);
     }
   };

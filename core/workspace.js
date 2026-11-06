@@ -113,6 +113,22 @@ Blockly.Workspace = function(opt_options) {
    * @private
    */
   this.potentialVariableMap_ = null;
+
+  /**
+   * FTRPRF: true while an exercise developer is viewing or making an
+   * exercise. Hidden blocks then stay visible and editable.
+   * @type {boolean}
+   * @private
+   */
+  this.developerMode_ = false;
+
+  /**
+   * FTRPRF: the types (or procCodes, for custom blocks) of the blocks that
+   * are useful for this exercise. Empty means the toolbox is not filtered.
+   * @type {!Array.<string>}
+   * @private
+   */
+  this.usefulBlocks_ = [];
 };
 
 /**
@@ -646,6 +662,166 @@ Blockly.Workspace.prototype.createPotentialVariableMap = function() {
  */
 Blockly.Workspace.prototype.getVariableMap = function() {
   return this.variableMap_;
+};
+
+/**
+ * FTRPRF: get whether this workspace is used in developer mode.
+ * @return {boolean} True if in developer mode.
+ */
+Blockly.Workspace.prototype.isInDeveloperMode = function() {
+  return this.developerMode_;
+};
+
+/**
+ * FTRPRF: set whether this workspace is used by an exercise developer.
+ * @param {boolean} developerMode True for developer mode.
+ */
+Blockly.Workspace.prototype.setDeveloperMode = function(developerMode) {
+  this.developerMode_ = developerMode;
+};
+
+/**
+ * FTRPRF: create the 'Exercise blocks' procedure definition. Called by
+ * Blockly.Xml.domToWorkspace when the loaded XML has none.
+ */
+Blockly.Workspace.prototype.createExerciseBlocksCallback = function() {
+  Blockly.Procedures.newExerciseBlocksProcedure(this);
+};
+
+/**
+ * FTRPRF: called with the useful blocks whenever they are set, so the host
+ * (scratch-gui) can filter its toolbox. Hosts override this on the prototype.
+ * @param {!Array.<string>} usefulBlocks The useful block types / procCodes.
+ */
+Blockly.Workspace.prototype.externalFilterToolboxCallback = function(
+    usefulBlocks) {
+  console.warn('Override Blockly.Workspace.prototype.' +
+      'externalFilterToolboxCallback to filter the toolbox.', usefulBlocks);
+};
+
+/**
+ * FTRPRF: get the blocks that are useful for this exercise.
+ * @return {!Array.<string>} Block types / procCodes.
+ */
+Blockly.Workspace.prototype.getUsefulBlocks = function() {
+  return this.usefulBlocks_;
+};
+
+/**
+ * FTRPRF: set the blocks that are useful for this exercise and notify
+ * externalFilterToolboxCallback.
+ * @param {!Array.<string>} usefulBlocks Block types / procCodes.
+ */
+Blockly.Workspace.prototype.setUsefulBlocks = function(usefulBlocks) {
+  this.usefulBlocks_ = usefulBlocks;
+  if (this.externalFilterToolboxCallback) {
+    this.externalFilterToolboxCallback(usefulBlocks);
+  }
+};
+
+/**
+ * FTRPRF: map blocks to their types, or to their procCodes for
+ * procedures_call blocks.
+ * @param {!Array.<!Blockly.Block>} blocks The blocks.
+ * @return {!Array.<string>} Types / procCodes, in the same order.
+ */
+Blockly.Workspace.prototype.mapBlocksToType = function(blocks) {
+  return blocks.map(function(block) {
+    var type = block.type;
+    return type !== 'procedures_call' ? type : block.getProcCode();
+  });
+};
+
+/**
+ * FTRPRF: get the top block that defines 'Exercise blocks'.
+ * @return {Blockly.Block|undefined} That block, or undefined if there is none.
+ */
+Blockly.Workspace.prototype.getDefineExerciseBlocksBlock = function() {
+  var topBlocks = this.getTopBlocks();
+  for (var i = 0; i < topBlocks.length; i++) {
+    if (topBlocks[i].isDefineExerciseBlocksBlock()) {
+      return topBlocks[i];
+    }
+  }
+  return undefined;
+};
+
+/**
+ * FTRPRF: stack a procedures_call for the given mutation under the
+ * 'define Exercise blocks' block. Does nothing when there is no such
+ * definition, when it lists no blocks yet (the toolbox is unfiltered then), or
+ * when its stack ends in a cap block (FTRPRF20-5XN).
+ * @param {!Element} newMutation The `<mutation>` of the procedure to add.
+ */
+Blockly.Workspace.prototype.addNewMutationToExerciseBlocks = function(
+    newMutation) {
+  var exerciseBlock = this.getDefineExerciseBlocksBlock();
+  if (!exerciseBlock) {
+    return;
+  }
+  var noExerciseBlocksDefined = exerciseBlock.getChildren().length === 1;
+  if (noExerciseBlocksDefined) {
+    return;
+  }
+  var exerciseBlockConnection = exerciseBlock.lastConnectionInStack();
+  if (!exerciseBlockConnection) {
+    return;
+  }
+
+  // Additional useful blocks go to the bottom of the 'Exercise blocks' stack.
+  var blockDom = Blockly.Xml.textToDom('<xml>' +
+      '<block type="procedures_call">' +
+      Blockly.Xml.domToText(newMutation) +
+      '</block>' +
+      '</xml>').firstChild;
+  var block = Blockly.Xml.domToBlock(blockDom, this);
+  exerciseBlockConnection.connect(block.previousConnection);
+};
+
+/**
+ * FTRPRF: add a custom block to the useful blocks, and optionally to the
+ * 'Exercise blocks' definition. Does nothing while no useful blocks are
+ * defined, so the toolbox does not start filtering.
+ * @param {!Element} newMutation The `<mutation>` of the procedure to add.
+ * @param {boolean} addToExerciseBlocks Whether to also stack a call under
+ *     the 'Exercise blocks' definition.
+ */
+Blockly.Workspace.prototype.addNewMutationToUsefulBlocks = function(
+    newMutation, addToExerciseBlocks) {
+  var hasExerciseBlocks = this.usefulBlocks_.length > 0;
+  if (!hasExerciseBlocks) {
+    return;
+  }
+  var usefulProcCode = newMutation.getAttribute('proccode');
+  // Deduplicated in first-seen order, like the old fork's
+  // [...new Set(list.concat(procCode))].
+  var usefulBlocks = [];
+  var candidates = this.getUsefulBlocks().concat(usefulProcCode);
+  for (var i = 0; i < candidates.length; i++) {
+    if (usefulBlocks.indexOf(candidates[i]) == -1) {
+      usefulBlocks.push(candidates[i]);
+    }
+  }
+  this.setUsefulBlocks(usefulBlocks);
+  if (addToExerciseBlocks) {
+    this.addNewMutationToExerciseBlocks(newMutation);
+  }
+};
+
+/**
+ * FTRPRF: whether a custom block should be offered in the flyout. It is when
+ * it is listed as useful, when no useful blocks are defined, or in developer
+ * mode. 'Exercise blocks' itself is never offered.
+ * @param {string} procCode The procCode to check.
+ * @return {boolean} True if useful.
+ */
+Blockly.Workspace.prototype.isProcCodeUseful = function(procCode) {
+  if (procCode === 'Exercise blocks') {
+    return false;
+  }
+  var usefulBlocks = this.usefulBlocks_;
+  return usefulBlocks.length === 0 || usefulBlocks.indexOf(procCode) != -1 ||
+      this.isInDeveloperMode();
 };
 
 /**

@@ -104,6 +104,14 @@ Blockly.Block = function(workspace, prototypeName, opt_id) {
   this.deletable_ = true;
 
   /**
+   * FTRPRF: whether this block's group is hidden from non-developers. Only
+   * meaningful on a root hat block; see isInvisible().
+   * @type {boolean}
+   * @private
+   */
+  this.invisible_ = false;
+
+  /**
    * @type {boolean}
    * @private
    */
@@ -525,6 +533,14 @@ Blockly.Block.prototype.getRootBlock = function() {
 };
 
 /**
+ * FTRPRF: whether this block is the root block of its current group.
+ * @return {boolean} True if this block is the root block.
+ */
+Blockly.Block.prototype.isRootBlock = function() {
+  return this.getRootBlock() === this;
+};
+
+/**
  * Find all the blocks that are directly nested inside this one.
  * Includes value and statement inputs, as well as any following statement.
  * Excludes any connection on an output tab or any preceding statement.
@@ -628,6 +644,51 @@ Blockly.Block.prototype.setDeletable = function(deletable) {
 };
 
 /**
+ * FTRPRF: get whether this block is invisible (hidden from non-developers).
+ * The flag lives on the root block of the group, so a block dragged out of a
+ * hidden group is no longer hidden. Only a root hat block can be invisible.
+ * @return {boolean} True if invisible.
+ */
+Blockly.Block.prototype.isInvisible = function() {
+  if (this.isRootBlock()) {
+    if (this.isHatBlock()) {
+      return this.invisible_;
+    }
+    return false;
+  }
+  return this.getRootBlock().isInvisible();
+};
+
+/**
+ * FTRPRF: set all children of this block to (in)visible.
+ * @param {boolean} invisible True if the children should be invisible.
+ * @private
+ */
+Blockly.Block.prototype.setChildrenInvisible_ = function(invisible) {
+  var children = this.getChildren();
+  for (var childIndex = 0; childIndex < children.length; childIndex++) {
+    children[childIndex].setInvisible(invisible);
+  }
+};
+
+/**
+ * FTRPRF: set whether this block's group is invisible.
+ * Calls run top-down, so the root block always holds the right value in
+ * this.invisible_. For non-developers the group also becomes non-deletable.
+ * @param {boolean} invisible True if invisible.
+ */
+Blockly.Block.prototype.setInvisible = function(invisible) {
+  // Hiding a block hides the whole group, so the flag is kept on the root.
+  if (this.isRootBlock()) {
+    this.invisible_ = invisible;
+  }
+  if (!this.workspace.isInDeveloperMode()) {
+    this.setDeletable(!invisible);
+    this.setChildrenInvisible_(invisible);
+  }
+};
+
+/**
  * Get whether this block is movable or not.
  * @return {boolean} True if movable.
  */
@@ -705,6 +766,27 @@ Blockly.Block.prototype.setEditable = function(editable) {
       field.updateEditable();
     }
   }
+};
+
+/**
+ * FTRPRF: whether this block is a hat block (e.g. event_whenflagclicked or
+ * procedures_definition): no output and no previous connection.
+ * @return {boolean} True if this is a hat block.
+ */
+Blockly.Block.prototype.isHatBlock = function() {
+  return !this.outputConnection && !this.previousConnection;
+};
+
+/**
+ * FTRPRF: whether this block is the procedure definition that lists the
+ * blocks that are useful for this exercise (the ones the toolbox keeps).
+ * @return {boolean} True if this block defines the exercise blocks.
+ */
+Blockly.Block.prototype.isDefineExerciseBlocksBlock = function() {
+  return this.type === 'procedures_definition' &&
+      this.getChildren().some(function(childBlock) {
+        return childBlock.procCode_ === 'Exercise blocks';
+      });
 };
 
 /**
@@ -1680,6 +1762,41 @@ Blockly.Block.prototype.setCommentText = function(text) {
     Blockly.Events.fire(new Blockly.Events.BlockChange(
         this, 'comment', null, this.comment, text || ''));
     this.comment = text;
+  }
+};
+
+/**
+ * FTRPRF: mark this group of blocks as hidden for non-developers, or unmark
+ * it. The marker is a "%hidden%" line at the start of the root block's
+ * comment, which is how saved projects carry it.
+ * @param {boolean} invisible True to add the "%hidden%" marker, false to
+ *     remove it.
+ */
+Blockly.Block.prototype.setHiddenComment = function(invisible) {
+  if (!this.isRootBlock()) {
+    this.getRootBlock().setHiddenComment(invisible);
+    return;
+  }
+  // this.invisible_ follows from setCommentText (BlockSvg) or the XML loader.
+  var rendered = this.workspace.rendered;
+  var comment = this.getCommentText();
+  if (invisible) {
+    if (!comment || comment.indexOf('%hidden%') == -1) {
+      if (rendered) {
+        this.rendered = true;
+      }
+      this.setCommentText('%hidden%\n' + comment, null, null, null, true);
+    }
+  } else {
+    if (!comment) {
+      return;
+    }
+    comment = comment.replace(/%hidden%(\n)?/, '');
+    this.setCommentText(comment.trim() === '' ? null : comment, null, null,
+        null, true);
+  }
+  if (rendered) {
+    this.render();
   }
 };
 

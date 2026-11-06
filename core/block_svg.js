@@ -1150,12 +1150,23 @@ Blockly.BlockSvg.prototype.setCommentText = function(text, commentId,
       this.comment = new Blockly.ScratchBlockComment(this, text, commentId,
           commentX, commentY, minimized);
       changedState = true;
+      // FTRPRF: a "%hidden%" comment hides the group.
+      if (text.indexOf('%hidden%') === 0) {
+        this.setInvisible(true);
+      }
     } else {
       this.comment.setText(/** @type {string} */ (text));
+      // FTRPRF: adding or removing the marker (un)hides the group.
+      this.setInvisible(text.indexOf('%hidden%') === 0);
+      // Toggle the bubble to refresh the comment.
+      this.comment.setVisible(false);
+      this.comment.setVisible(true);
     }
   } else {
     if (this.comment) {
       this.comment.dispose();
+      // FTRPRF: no comment, no marker.
+      this.setInvisible(false);
       changedState = true;
     }
   }

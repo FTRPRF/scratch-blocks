@@ -472,15 +472,25 @@ Blockly.InsertionMarkerManager.prototype.shouldDelete_ = function(candidate,
  * @private
  */
 Blockly.InsertionMarkerManager.prototype.maybeShowPreview_ = function(candidate) {
-  // Nope, don't add a marker.
-  if (this.wouldDeleteBlock_) {
-    return;
-  }
   var closest = candidate.closest;
   var local = candidate.local;
 
   // Nothing to connect to.
   if (!closest) {
+    return;
+  }
+
+  // Nope, don't add a marker.
+  if (this.wouldDeleteBlock_) {
+    return;
+  }
+
+  // FTRPRF: don't offer to insert into a group that is hidden from
+  // non-developers.
+  var closestSourceBlock = closest.sourceBlock_;
+  var closestSourceBlockIsInvisible = closestSourceBlock.isInvisible() &&
+      !closestSourceBlock.workspace.isInDeveloperMode();
+  if (closestSourceBlockIsInvisible) {
     return;
   }
 

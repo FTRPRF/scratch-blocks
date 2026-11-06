@@ -659,12 +659,39 @@ Blockly.BlockSvg.prototype.getHeightWidth = function() {
 };
 
 /**
+ * FTRPRF: hide this block's SVG group (and so its whole stack) with
+ * 'visibility:hidden'.
+ */
+Blockly.BlockSvg.prototype.setVisibilityAttributeToHidden = function() {
+  var svgStyle = this.svgGroup_.getAttribute('style');
+  if (!svgStyle) {
+    svgStyle = 'visibility:hidden';
+  } else if (svgStyle.indexOf('visibility:') == -1) {
+    var svgStyleEndsOnSemicolon = svgStyle.trim().slice(-1) === ';';
+    if (!svgStyleEndsOnSemicolon) {
+      svgStyle += ';';
+    }
+    svgStyle += 'visibility:hidden';
+  } else {
+    // Change "visibility:..." to "visibility:hidden".
+    svgStyle = svgStyle.replace(/visibility:[^;]*/, 'visibility:hidden');
+  }
+  this.svgGroup_.setAttribute('style', svgStyle);
+};
+
+/**
  * Render the block.
  * Lays out and reflows a block based on its contents and settings.
  * @param {boolean=} opt_bubble If false, just render this block.
  *   If true, also render block's parent, grandparent, etc.  Defaults to true.
  */
 Blockly.BlockSvg.prototype.render = function(opt_bubble) {
+  // FTRPRF: hidden groups are not drawn for non-developers.
+  var shouldBlockBeInvisible = this.isInvisible() && this.isHatBlock() &&
+      !this.workspace.isInDeveloperMode();
+  if (shouldBlockBeInvisible) {
+    this.setVisibilityAttributeToHidden();
+  }
   Blockly.Field.startCache();
   this.rendered = true;
 
@@ -1512,7 +1539,10 @@ Blockly.BlockSvg.prototype.renderInputShape_ = function(input, x, y) {
     inputShape.setAttribute('transform',
         'translate(' + inputShapeX + ',' + inputShapeY + ')');
     inputShape.setAttribute('data-argument-type', inputShapeInfo.argType);
-    inputShape.setAttribute('style', 'visibility: visible');
+    // FTRPRF: an explicit 'visible' would show through a hidden group.
+    if (!this.isInvisible()) {
+      inputShape.setAttribute('style', 'visibility: visible');
+    }
   }
 };
 
