@@ -12,7 +12,8 @@
  *   - per block: `<comment>` (if block.comment resolves), `<mutation>`, one
  *     `<value>` per input (the VM writes statement inputs as `<value>` too;
  *     a real block before its obscured shadow), `<field>`s, `<next>`;
- *   - comment attributes: id, x, y, w, h, pinned (= !minimized), minimized.
+ *   - comment attributes: id, x, y, w, h, pinned (scratch-vm always writes
+ *     "true" for block comments), minimized.
  *
  * `expect` describes what the loader must derive from the data:
  *   - invisible / visible: block ids whose isInvisible() must be true / false
@@ -96,8 +97,8 @@ function ftrprfFixture_moveSteps(id, opt_nextXml) {
  * @return {string} XML.
  */
 function ftrprfFixture_comment(id, text, minimized) {
-  return '<comment id="' + id + '" x="184" y="16" w="200" h="200" pinned="' +
-      !minimized + '" minimized="' + minimized + '">' + text + '</comment>';
+  return '<comment id="' + id + '" x="184" y="16" w="200" h="200" pinned="true"' +
+      ' minimized="' + minimized + '">' + text + '</comment>';
 }
 
 /**
