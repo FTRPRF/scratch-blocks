@@ -5,19 +5,41 @@ name: Publish @ftrprf/scratch-blocks
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: write
+# Nothing by default; each job asks for what it needs. Only the final publish
+# job holds `packages: write`, and it runs no dependency code: it downloads the
+# packed tarball and publishes it with --ignore-scripts.
+permissions: {}
 
 concurrency:
   group: publish-ftrprf
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read  # cannot publish
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
+      npm_tag: ${{ steps.tag.outputs.npm_tag }}
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          persist-credentials: false
+
+      # Same rule as the gui workflow: an -rc version goes out under `rc`,
+      # anything else under `latest`.
+      - name: Pick the dist-tag
+        id: tag
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [[ "$version" == *-rc.* ]]; then
+            echo "npm_tag=rc" >> "$GITHUB_OUTPUT"
+          else
+            echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version $version"
 
       - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4
         with:
@@ -70,7 +92,9 @@ jobs:
           '
 
       - name: Record the source commit in package.json
-        run: npm pkg set ftrprf.sourceCommit="${{ github.sha }}"
+        run: npm pkg set ftrprf.sourceCommit="$SOURCE_SHA"
+        env:
+          SOURCE_SHA: ${{ github.sha }}
 
       - name: Check the tarball contents
         run: |
@@ -92,7 +116,47 @@ jobs:
 
       # Scripts are skipped: the build already ran above, and `prepublish`
       # would run it a second time.
-      - name: Publish
-        run: npm publish --ignore-scripts
+      - name: Pack
+        id: pack
+        run: |
+          mkdir pack
+          npm pack --ignore-scripts --pack-destination pack
+          tarball="$(cd pack && ls -- *.tgz)"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: scratch-blocks-tarball
+          path: pack/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    env:
+      TARBALL: ${{ needs.build.outputs.tarball }}
+      NPM_TAG: ${{ needs.build.outputs.npm_tag }}
+    steps:
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: scratch-blocks-tarball
+          path: pack
+
+      # Only for the registry auth (.npmrc); no checkout and no install here.
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4
+        with:
+          node-version: 18
+          registry-url: https://npm.pkg.github.com
+          scope: '@ftrprf'
+
+      - name: Publish the packed tarball
+        run: |
+          if [ "$(find pack -name '*.tgz' | wc -l)" != "1" ] || [ ! -f "pack/$TARBALL" ]; then
+            echo "::error::expected exactly pack/$TARBALL in the build artifact"; ls -l pack; exit 1
+          fi
+          npm publish "pack/$TARBALL" --ignore-scripts --tag "$NPM_TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
