@@ -157,6 +157,6 @@ jobs:
           if [ "$(find pack -name '*.tgz' | wc -l)" != "1" ] || [ ! -f "pack/$TARBALL" ]; then
             echo "::error::expected exactly pack/$TARBALL in the build artifact"; ls -l pack; exit 1
           fi
-          npm publish "pack/$TARBALL" --ignore-scripts --tag "$NPM_TAG"
+          npm publish "./pack/$TARBALL" --ignore-scripts --tag "$NPM_TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
