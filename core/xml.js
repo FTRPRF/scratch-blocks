@@ -746,8 +746,14 @@ Blockly.Xml.domToBlockHeadless_ = function(xmlBlock, workspace) {
         if (visible && isNotHidden && !block.isInFlyout) {
           // Give the renderer a millisecond to render and position the block
           // before positioning the comment bubble.
+          // FTRPRF: re-check visibility when the bubble opens. A comment is
+          // read before the block's inputs, so a group that is hidden by its
+          // contents (the 'define Exercise blocks' explanation, which carries
+          // no "%hidden%" marker) only becomes invisible after this point.
           setTimeout(function() {
-            if (block.comment && block.comment.setVisible) {
+            var mayOpen = block.workspace &&
+                (block.workspace.isInDeveloperMode() || !block.isInvisible());
+            if (mayOpen && block.comment && block.comment.setVisible) {
               block.comment.setVisible(visible == 'true');
             }
           }, 1);

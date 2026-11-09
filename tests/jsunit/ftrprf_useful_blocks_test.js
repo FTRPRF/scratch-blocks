@@ -13,6 +13,7 @@
 
 goog.require('goog.testing');
 goog.require('goog.testing.events');
+goog.require('goog.testing.MockClock');
 
 var ftrprfTest_workspaces = [];
 var ftrprfTest_divs = [];
@@ -804,4 +805,70 @@ function test_menuItems_carryDataTestAttributes() {
   items = ftrprfTest_openMenu(flag);
   assertNotUndefined(ftrprfTest_menuItem(items, 'ftrprf-display-blocks'));
   Blockly.ContextMenu.hide();
+}
+
+// ---------------------------------------------------------------------------
+// Explanation comment on the hidden 'define Exercise blocks'
+// ---------------------------------------------------------------------------
+
+/**
+ * Load VM-shaped XML (comment before the statement, pinned="true") into a
+ * rendered workspace under a mock clock, then run the deferred bubble open.
+ * @param {boolean} devMode Developer-mode workspace.
+ * @param {string} xmlText Workspace XML.
+ * @return {!Blockly.WorkspaceSvg} The workspace.
+ */
+function ftrprfTest_loadAndOpenBubbles(devMode, xmlText) {
+  var clock = new goog.testing.MockClock(true);
+  try {
+    var ws = ftrprfTest_newWorkspace(devMode, true);
+    ftrprfTest_load(xmlText, ws);
+    clock.tick(10);
+  } finally {
+    clock.uninstall();
+  }
+  return ws;
+}
+
+var FTRPRF_PINNED_EXPLANATION = '<comment id="c1" x="200" y="-160" w="200" ' +
+    'h="200" pinned="true" minimized="false">' + FTRPRF_EXPLANATION +
+    '</comment>';
+
+function test_explanationBubble_onHiddenExerciseDefinition_staysClosed() {
+  var ws = ftrprfTest_loadAndOpenBubbles(false,
+      '<xml xmlns="http://www.w3.org/1999/xhtml">' +
+      ftrprfFixture_defineExerciseBlocks('def', FTRPRF_PINNED_EXPLANATION) +
+      '</xml>');
+  var def = ws.getBlockById('def');
+  assertTrue('the definition is hidden', def.isInvisible());
+  assertNotNull('the comment is kept', def.comment);
+  assertFalse('its bubble is not opened', def.comment.isVisible());
+  // The saved state is unchanged: the comment still serializes as pinned.
+  var xml = Blockly.Xml.blockToDom(def);
+  var comment = xml.getElementsByTagName('comment')[0];
+  assertEquals(FTRPRF_EXPLANATION, comment.textContent);
+}
+
+function test_explanationBubble_developerMode_opens() {
+  var ws = ftrprfTest_loadAndOpenBubbles(true,
+      '<xml xmlns="http://www.w3.org/1999/xhtml">' +
+      ftrprfFixture_defineExerciseBlocks('def', FTRPRF_PINNED_EXPLANATION) +
+      '</xml>');
+  var def = ws.getBlockById('def');
+  assertFalse('visible for developers', def.isInvisible());
+  assertTrue('the bubble opens', def.comment.isVisible());
+}
+
+function test_pinnedComment_onVisibleBlock_opens() {
+  var ws = ftrprfTest_loadAndOpenBubbles(false,
+      '<xml xmlns="http://www.w3.org/1999/xhtml">' +
+      '<block id="flag" type="event_whenflagclicked" x="0" y="0">' +
+      '<comment id="c2" x="200" y="0" w="200" h="200" pinned="true" ' +
+      'minimized="false">Zet de sprite klaar</comment>' +
+      '</block>' +
+      '</xml>');
+  var flag = ws.getBlockById('flag');
+  assertFalse(flag.isInvisible());
+  assertTrue('a pinned comment on a visible block opens',
+      flag.comment.isVisible());
 }
